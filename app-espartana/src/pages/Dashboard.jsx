@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, ArrowRightLeft, Send, Settings, Target, TrendingDown, TrendingUp, PieChart as PieChartIcon, Loader2, Wallet } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, ArrowRightLeft, Send, Settings, Target, TrendingDown, TrendingUp, PieChart as PieChartIcon, Loader2, Wallet, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, PieChart, Pie, Cell } from 'recharts';
 import { db } from '../firebase';
@@ -10,43 +10,36 @@ const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', '
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  
-  // 🧠 CONEXIÓN AL CEREBRO GLOBAL
   const { baseId, baseNombre, mesActual, setMesActual, anioActual, setAnioActual } = useApp();
   
   const [loading, setLoading] = useState(true);
-  const [baseConfig, setBaseConfig] = useState(null); // Acá guardaremos tus categorías y metas
+  const [baseConfig, setBaseConfig] = useState(null); 
 
   const [municionTotal, setMunicionTotal] = useState(0);
   const [totalBoveda, setTotalBoveda] = useState(0);
   const [totalIngresosReal, setTotalIngresosReal] = useState(0);
+  const [totalGastosReal, setTotalGastosReal] = useState(0);
   const [gastosPorCategoria, setGastosPorCategoria] = useState({});
 
-  const [activeTrend, setActiveTrend] = useState('sueldo');
+  const [activeTrend, setActiveTrend] = useState('ingresos');
 
-  // FUNCIONES DEL MOTOR DEL TIEMPO
   const mesAnterior = () => {
     if (mesActual === 0) { setMesActual(11); setAnioActual(anioActual - 1); } 
     else { setMesActual(mesActual - 1); }
   };
-
   const mesSiguiente = () => {
     if (mesActual === 11) { setMesActual(0); setAnioActual(anioActual + 1); } 
     else { setMesActual(mesActual + 1); }
   };
 
-  // FUNCIÓN MAESTRA DE RECOLECCIÓN DE DATOS
   useEffect(() => {
-    if (!baseId) {
-      navigate('/'); // Seguridad: si no hay base, al lobby
-      return;
-    }
+    if (!baseId) { navigate('/'); return; }
 
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
         
-        // 1. Cargar ADN de la base (Categorías y Meta)
+        // 1. ADN de la base
         const docSnap = await getDoc(doc(db, "bases", baseId));
         let config = { categorias: [], metaUsd: 0 };
         if (docSnap.exists()) {
@@ -54,83 +47,67 @@ const Dashboard = () => {
           setBaseConfig(config);
         }
 
-        // 2. Traer Ingresos de esta base
+        // 2. Ingresos del mes
         const qIngresos = query(collection(db, "ingresos"), where("baseId", "==", baseId));
         const ingresosSnap = await getDocs(qIngresos);
         let sumaIngresos = 0;
-        
         ingresosSnap.forEach(doc => {
-          const data = doc.data();
-          const fecha = data.fecha?.toDate();
-          // Filtro Absoluto por Mes y Año
-          if (fecha && fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual) {
-            sumaIngresos += data.monto;
-          }
+          const fecha = doc.data().fecha?.toDate();
+          if (fecha && fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual) sumaIngresos += doc.data().monto;
         });
         setTotalIngresosReal(sumaIngresos);
 
-        // 3. Traer Gastos de esta base
+        // 3. Gastos del mes y Distribución
         const qGastos = query(collection(db, "gastos"), where("baseId", "==", baseId));
         const gastosSnap = await getDocs(qGastos);
         let sumaGastos = 0;
         let distribucion = {};
         
-        // Inicializamos la distribución con las categorías dinámicas
         config.categorias?.forEach(c => distribucion[c.id] = 0);
         distribucion['Otros'] = 0;
 
         gastosSnap.forEach(doc => {
           const data = doc.data();
           const fecha = data.fecha?.toDate();
-          
           if (fecha && fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual) {
             sumaGastos += data.monto;
-            if (distribucion[data.categoriaId] !== undefined) {
-              distribucion[data.categoriaId] += data.monto;
-            } else {
-              distribucion['Otros'] += data.monto;
-            }
+            if (distribucion[data.categoriaId] !== undefined) distribucion[data.categoriaId] += data.monto;
+            else distribucion['Otros'] += data.monto;
           }
         });
+        setTotalGastosReal(sumaGastos);
+        setGastosPorCategoria(distribucion);
 
-        // 4. Traer Bóveda (Dólares totales de la base, sin importar el mes, para el acumulado)
+        // 4. Bóveda (Acumulado Total Histórico)
         const qBoveda = query(collection(db, "boveda"), where("baseId", "==", baseId));
         const bovedaSnap = await getDocs(qBoveda);
         let sumaUsd = 0;
         bovedaSnap.forEach(doc => sumaUsd += doc.data().montoUsd);
         setTotalBoveda(sumaUsd);
 
-        // 5. Actualizar estados
+        // 5. Saldo Mensual
         setMunicionTotal(sumaIngresos - sumaGastos);
-        setGastosPorCategoria(distribucion);
 
-      } catch (error) {
-        console.error("Error cargando la base de datos:", error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (error) { console.error(error); } 
+      finally { setLoading(false); }
     };
 
     fetchDashboardData();
   }, [baseId, mesActual, anioActual, navigate]);
 
-  // --- DATOS SECCIÓN 1: TENDENCIAS (LÍNEAS) ---
+  // --- DATOS PARA GRÁFICOS ---
   const trendGraphs = {
-    sueldo: {
-      id: 'sueldo',
-      title: 'Evolución Ingresos',
-      color: 'var(--color-neon-green)',
-      icon: TrendingUp,
-      goal: 'Crecimiento',
-      data: [{ mes: 'Mes Ant.', valor: 0 }, { mes: 'Actual', valor: totalIngresosReal }]
+    ingresos: {
+      id: 'ingresos', title: 'Evolución Ingresos', color: 'var(--color-neon-green)', icon: TrendingUp, goal: 'Acumulado Mes',
+      data: [{ mes: 'Mes Pasado', valor: 0 }, { mes: MESES[mesActual], valor: totalIngresosReal }]
+    },
+    gastos: {
+      id: 'gastos', title: 'Tendencia Bajas', color: 'var(--color-alert-red)', icon: TrendingDown, goal: 'Bajas Mes',
+      data: [{ mes: 'Mes Pasado', valor: 0 }, { mes: MESES[mesActual], valor: totalGastosReal }]
     },
     boveda: {
-      id: 'boveda',
-      title: 'Acumulación Bóveda',
-      color: 'var(--color-neon-green)',
-      icon: TrendingUp,
-      goal: `Meta: ${baseConfig?.metaUsd || 0} USD`,
-      data: [{ mes: 'Acumulado', valor: totalBoveda }]
+      id: 'boveda', title: 'Acumulación Bóveda', color: '#10b981', icon: Wallet, goal: `Meta: ${baseConfig?.metaUsd || 0} USD`,
+      data: [{ mes: 'Acumulado Total', valor: totalBoveda }]
     }
   };
 
@@ -151,38 +128,27 @@ const Dashboard = () => {
     return null;
   };
 
-  // --- DATOS SECCIÓN 2: DISTRIBUCIÓN (TORTA DINÁMICA) ---
+  // Pie Chart dinámico (Solo muestra las categorías que tuvieron gastos en el mes)
   const pieData = baseConfig?.categorias?.map(cat => ({
-    name: cat.nombre,
-    value: gastosPorCategoria[cat.id] || 0,
-    color: cat.color
+    name: cat.nombre, value: gastosPorCategoria[cat.id] || 0, color: cat.color
   })).filter(item => item.value > 0) || [];
-
-  // Agregamos "Otros" si hay gastos huérfanos
-  if (gastosPorCategoria['Otros'] > 0) {
-    pieData.push({ name: 'Otros', value: gastosPorCategoria['Otros'], color: '#6b7280' });
-  }
+  
+  if (gastosPorCategoria['Otros'] > 0) pieData.push({ name: 'Otros', value: gastosPorCategoria['Otros'], color: '#6b7280' });
 
   return (
     <div className="pt-6 px-6 animate-in fade-in duration-500 overflow-x-hidden pb-40">
       
-      {/* CABECERA CON EL MOTOR DEL TIEMPO */}
+      {/* MOTOR DEL TIEMPO */}
       <header className="flex justify-between items-center mb-8 bg-white dark:bg-[#111] p-2 rounded-full border border-gray-100 dark:border-gray-800 shadow-sm">
-        <button onClick={mesAnterior} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-          <ChevronLeft className="w-5 h-5 text-gray-500" />
-        </button>
+        <button onClick={mesAnterior} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><ChevronLeft className="w-5 h-5 text-gray-500" /></button>
         <div className="text-center">
-          <h2 className="text-sm font-black text-gray-900 dark:text-white tracking-widest uppercase">
-            {MESES[mesActual]} {anioActual}
-          </h2>
+          <h2 className="text-sm font-black text-gray-900 dark:text-white tracking-widest uppercase">{MESES[mesActual]} {anioActual}</h2>
           <p className="text-[10px] text-[var(--color-neon-green)] font-bold uppercase">{baseNombre}</p>
         </div>
-        <button onClick={mesSiguiente} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-          <ChevronRight className="w-5 h-5 text-gray-500" />
-        </button>
+        <button onClick={mesSiguiente} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><ChevronRight className="w-5 h-5 text-gray-500" /></button>
       </header>
 
-      {/* SALDO PRINCIPAL MENSUAL */}
+      {/* MUNICIÓN MENSUAL */}
       <section className="mb-8">
         <p className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-widest mb-2 flex items-center justify-between">
           <span>Munición Mensual</span>
@@ -191,9 +157,7 @@ const Dashboard = () => {
           </button>
         </p>
         {loading ? (
-          <div className="h-12 flex items-center">
-            <Loader2 className="w-8 h-8 text-[var(--color-neon-green)] animate-spin" />
-          </div>
+          <div className="h-12 flex items-center"><Loader2 className="w-8 h-8 text-[var(--color-neon-green)] animate-spin" /></div>
         ) : (
           <div className="flex justify-start items-baseline">
             <span className="text-3xl text-gray-400 dark:text-[var(--color-neon-green)]/70 font-mono mr-1">$</span>
@@ -204,29 +168,27 @@ const Dashboard = () => {
         )}
       </section>
 
-      {/* BOTONES DE ACCIÓN RÁPIDA (REDUCIDOS A 3 PORQUE AHORA TENEMOS EL BOTÓN + GLOBAL) */}
-      <section className="flex justify-start gap-4 mb-10 overflow-x-auto pb-2 scrollbar-hide">
+      {/* BOTONES ACCIÓN RÁPIDA */}
+      <section className="flex justify-between gap-2 sm:gap-4 mb-10 overflow-x-auto pb-2 scrollbar-hide">
         <div className="flex flex-col items-center gap-2 min-w-[70px]">
-          <button onClick={() => navigate('/ingresos')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-[var(--color-neon-green)] transition-all">
-            <TrendingUp className="w-6 h-6 text-[var(--color-neon-green)]" />
-          </button>
-          <span className="text-[10px] font-bold text-gray-500 uppercase">Ingreso</span>
+          <button onClick={() => navigate('/ingresos')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-[var(--color-neon-green)] transition-all"><TrendingUp className="w-6 h-6 text-[var(--color-neon-green)]" /></button>
+          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Ingreso</span>
         </div>
         <div className="flex flex-col items-center gap-2 min-w-[70px]">
-          <button onClick={() => navigate('/gastos')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-[var(--color-alert-red)] transition-all">
-            <TrendingDown className="w-6 h-6 text-[var(--color-alert-red)]" />
-          </button>
-          <span className="text-[10px] font-bold text-gray-500 uppercase">Gasto</span>
+          <button onClick={() => navigate('/gastos')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-[var(--color-alert-red)] transition-all"><TrendingDown className="w-6 h-6 text-[var(--color-alert-red)]" /></button>
+          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Gasto</span>
         </div>
         <div className="flex flex-col items-center gap-2 min-w-[70px]">
-          <button onClick={() => navigate('/boveda')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-blue-500 transition-all">
-            <Wallet className="w-6 h-6 text-blue-500" />
-          </button>
-          <span className="text-[10px] font-bold text-gray-500 uppercase">Bóveda</span>
+          <button onClick={() => navigate('/boveda')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-blue-500 transition-all"><Wallet className="w-6 h-6 text-blue-500" /></button>
+          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Bóveda</span>
+        </div>
+        <div className="flex flex-col items-center gap-2 min-w-[70px]">
+          <button onClick={() => navigate('/')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-gray-500 transition-all"><MoreHorizontal className="w-6 h-6 text-gray-500" /></button>
+          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Bases</span>
         </div>
       </section>
 
-      {/* FRENTES DE BATALLA DINÁMICOS */}
+      {/* FRENTES DE BATALLA DINÁMICOS + BÓVEDA FIJA */}
       <section className="mb-10">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Frentes de Batalla</h3>
@@ -237,45 +199,51 @@ const Dashboard = () => {
           <div className="flex justify-center"><Loader2 className="w-6 h-6 text-gray-500 animate-spin" /></div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            {/* Mapeo de categorías dinámicas que vienen de Ajustes */}
+            
+            {/* TARJETAS DE GASTOS CREADAS EN AJUSTES */}
             {baseConfig?.categorias?.map(cat => (
               <div key={cat.id} className="p-4 rounded-3xl text-white shadow-lg flex flex-col justify-between" style={{ backgroundColor: cat.color }}>
-                <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center mb-6 text-xl">
-                  {cat.emoji}
-                </div>
+                <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center mb-6 text-xl">{cat.emoji}</div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider opacity-90 mb-1 truncate">{cat.nombre}</p>
-                  <p className="text-xl sm:text-2xl font-black font-mono truncate">
-                    ${(gastosPorCategoria[cat.id] || 0).toLocaleString('es-AR')}
-                  </p>
+                  <p className="text-xl sm:text-2xl font-black font-mono truncate">${(gastosPorCategoria[cat.id] || 0).toLocaleString('es-AR')}</p>
                 </div>
               </div>
             ))}
             
-            {/* Si no hay categorías creadas aún */}
+            {/* TARJETA FIJA DE LA BÓVEDA */}
+            <div className="p-4 rounded-3xl bg-[#111] border border-gray-800 shadow-lg flex flex-col justify-between">
+              <div className="w-8 h-8 bg-green-500/20 rounded-xl flex items-center justify-center mb-6 text-xl">🏦</div>
+              <div>
+                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-400 mb-1 truncate">Bóveda (Ahorro)</p>
+                <p className="text-xl sm:text-2xl font-black font-mono text-[var(--color-neon-green)] truncate">USD {totalBoveda.toLocaleString('es-AR')}</p>
+              </div>
+            </div>
+
+            {/* Mensaje de apoyo si no hay categorías */}
             {(!baseConfig?.categorias || baseConfig.categorias.length === 0) && (
-              <div className="col-span-2 p-6 rounded-3xl border-2 border-dashed border-gray-300 dark:border-gray-800 flex flex-col items-center justify-center text-center bg-gray-50 dark:bg-black/50">
+              <div className="col-span-1 p-6 rounded-3xl border-2 border-dashed border-gray-300 dark:border-gray-800 flex flex-col items-center justify-center text-center bg-gray-50 dark:bg-black/50">
                 <Target className="w-8 h-8 text-gray-400 mb-2" />
-                <p className="text-sm font-bold text-gray-500">Sin frentes configurados</p>
-                <button onClick={() => navigate('/ajustes')} className="mt-2 text-xs font-black text-[var(--color-neon-green)] uppercase">Ir a Ajustes</button>
+                <button onClick={() => navigate('/ajustes')} className="mt-2 text-xs font-black text-[var(--color-neon-green)] uppercase">Crear Frentes</button>
               </div>
             )}
+
           </div>
         )}
       </section>
 
-      {/* SECCIÓN 1: GRÁFICOS DE TENDENCIA */}
+      {/* SECCIÓN 1: GRÁFICOS DE LÍNEAS (CON PESTAÑAS) */}
       <section className="mb-8 bg-white dark:bg-[#111] p-4 sm:p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
-        <div className="flex gap-2 mb-6 bg-gray-100 dark:bg-black p-1 rounded-xl w-fit overflow-x-auto">
-          <button onClick={() => setActiveTrend('sueldo')} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${activeTrend === 'sueldo' ? 'bg-[var(--color-neon-green)]/20 text-[var(--color-neon-green)]' : 'text-gray-500 hover:text-gray-300'}`}>Ingresos</button>
-          <button onClick={() => setActiveTrend('boveda')} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${activeTrend === 'boveda' ? 'bg-[var(--color-neon-green)]/20 text-[var(--color-neon-green)]' : 'text-gray-500 hover:text-gray-300'}`}>Bóveda</button>
+        <div className="flex gap-2 mb-6 bg-gray-100 dark:bg-black p-1 rounded-xl w-fit overflow-x-auto scrollbar-hide">
+          <button onClick={() => setActiveTrend('ingresos')} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${activeTrend === 'ingresos' ? 'bg-[var(--color-neon-green)]/20 text-[var(--color-neon-green)]' : 'text-gray-500 hover:text-gray-300'}`}>Ingresos</button>
+          <button onClick={() => setActiveTrend('gastos')} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${activeTrend === 'gastos' ? 'bg-[var(--color-alert-red)]/20 text-[var(--color-alert-red)]' : 'text-gray-500 hover:text-gray-300'}`}>Gastos</button>
+          <button onClick={() => setActiveTrend('boveda')} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${activeTrend === 'boveda' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Bóveda</button>
         </div>
 
         <div className="flex justify-between items-start mb-6">
           <div>
             <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
-              <currentTrend.icon className="w-5 h-5" style={{ color: currentTrend.color }} /> 
-              {currentTrend.title}
+              <currentTrend.icon className="w-5 h-5" style={{ color: currentTrend.color }} /> {currentTrend.title}
             </h3>
           </div>
           <div className="px-3 py-1 rounded-full text-xs font-bold font-mono" style={{ backgroundColor: `${currentTrend.color}20`, color: currentTrend.color }}>
@@ -294,7 +262,7 @@ const Dashboard = () => {
         </div>
       </section>
 
-      {/* SECCIÓN 2: GRÁFICO DE DISTRIBUCIÓN (TORTA) INDEPENDIENTE */}
+      {/* SECCIÓN 2: GRÁFICO DE TORTA DINÁMICO */}
       <section className="bg-white dark:bg-[#111] p-4 sm:p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
         <div className="mb-6">
           <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
@@ -307,11 +275,7 @@ const Dashboard = () => {
           <ResponsiveContainer width="100%" height="100%">
             {pieData.length > 0 ? (
               <PieChart>
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: '#111', borderRadius: '12px', border: '1px solid #333' }}
-                  itemStyle={{ color: 'white', fontWeight: 'bold', fontFamily: 'monospace' }}
-                  formatter={(value) => `$${value.toLocaleString('es-AR')}`}
-                />
+                <RechartsTooltip contentStyle={{ backgroundColor: '#111', borderRadius: '12px', border: '1px solid #333' }} itemStyle={{ color: 'white', fontWeight: 'bold', fontFamily: 'monospace' }} formatter={(value) => `$${value.toLocaleString('es-AR')}`} />
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
