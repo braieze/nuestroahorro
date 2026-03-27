@@ -3,9 +3,11 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import BottomNav from './components/BottomNav';
 import ProjectLobby from './pages/ProjectLobby';
-import Dashboard from './pages/Dashboard'; // <-- IMPORTAMOS EL NUEVO DASHBOARD
+import Dashboard from './pages/Dashboard';
+import Ingresos from './pages/Ingresos';
+import Gastos from './pages/Gastos'; // <-- IMPORTAMOS LA NUEVA PANTALLA DE GASTOS
 
-// Componente temporal para las rutas que aún nos faltan armar
+// Componente temporal 
 const PantallaEnConstruccion = ({ titulo }) => (
   <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 text-center">
     <h1 className="text-3xl font-black uppercase tracking-widest text-gray-800 dark:text-white mb-2">{titulo}</h1>
@@ -24,7 +26,7 @@ function App() {
         
         <div className="bg-gray-50 dark:bg-[var(--color-dark-base)] min-h-screen font-sans text-gray-900 dark:text-white relative pb-28">
 
-          {/* BOTÓN DE TEMA PROFESIONAL */}
+          {/* BOTÓN DE TEMA */}
           <button
             onClick={toggleTheme}
             className="absolute top-6 right-6 z-50 p-3 bg-white dark:bg-[var(--color-dark-card)] rounded-full shadow-md border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-[var(--color-neon-green)] hover:scale-110 transition-transform duration-300"
@@ -33,15 +35,15 @@ function App() {
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
 
-          {/* EL ENRUTADOR DE BATALLA */}
+          {/* EL ENRUTADOR */}
           <Routes>
             <Route path="/" element={<ProjectLobby />} />
-            
-            {/* ACÁ ENCHUFAMOS EL DASHBOARD REAL */}
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/ingresos" element={<Ingresos />} />
             
-            <Route path="/ingresos" element={<PantallaEnConstruccion titulo="Armada Dinámica (Ingresos)" />} />
-            <Route path="/gastos" element={<PantallaEnConstruccion titulo="Trincheras (Gastos y Deuda)" />} />
+            {/* ACÁ ENCHUFAMOS LA PANTALLA DE GASTOS */}
+            <Route path="/gastos" element={<Gastos />} />
+            
             <Route path="/boveda" element={<PantallaEnConstruccion titulo="La Bóveda (Ahorro)" />} />
             <Route path="/registro" element={<PantallaEnConstruccion titulo="Nuevo Registro (+)" />} />
           </Routes>
