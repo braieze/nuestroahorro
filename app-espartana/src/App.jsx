@@ -6,6 +6,7 @@ import ProjectLobby from './pages/ProjectLobby';
 import Dashboard from './pages/Dashboard';
 import Ingresos from './pages/Ingresos';
 import Gastos from './pages/Gastos'; // <-- IMPORTAMOS LA NUEVA PANTALLA DE GASTOS
+import Boveda from './pages/Boveda'; // <-- IMPORTAMOS LA BÓVEDA
 
 // Componente temporal 
 const PantallaEnConstruccion = ({ titulo }) => (
@@ -44,7 +45,9 @@ function App() {
             {/* ACÁ ENCHUFAMOS LA PANTALLA DE GASTOS */}
             <Route path="/gastos" element={<Gastos />} />
             
-            <Route path="/boveda" element={<PantallaEnConstruccion titulo="La Bóveda (Ahorro)" />} />
+            {/* ACÁ ENCHUFAMOS LA BÓVEDA */}
+            <Route path="/boveda" element={<Boveda />} />
+            
             <Route path="/registro" element={<PantallaEnConstruccion titulo="Nuevo Registro (+)" />} />
           </Routes>
 
