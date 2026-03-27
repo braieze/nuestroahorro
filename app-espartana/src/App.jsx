@@ -5,8 +5,10 @@ import BottomNav from './components/BottomNav';
 import ProjectLobby from './pages/ProjectLobby';
 import Dashboard from './pages/Dashboard';
 import Ingresos from './pages/Ingresos';
-import Gastos from './pages/Gastos'; // <-- IMPORTAMOS LA NUEVA PANTALLA DE GASTOS
-import Boveda from './pages/Boveda'; // <-- IMPORTAMOS LA BÓVEDA
+import Gastos from './pages/Gastos';
+import Boveda from './pages/Boveda';
+import AjustesBase from './pages/AjustesBase'; // <-- IMPORTAMOS LA SALA DE GUERRA
+import { AppProvider } from './context/AppContext'; // <-- IMPORTAMOS EL CEREBRO GLOBAL
 
 // Componente temporal 
 const PantallaEnConstruccion = ({ titulo }) => (
@@ -22,41 +24,43 @@ function App() {
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
   return (
-    <Router>
-      <div className={`${isDarkMode ? 'dark' : ''} transition-colors duration-500`}>
-        
-        <div className="bg-gray-50 dark:bg-[var(--color-dark-base)] min-h-screen font-sans text-gray-900 dark:text-white relative pb-28">
+    // 🧠 ENVOLVEMOS LA APP EN EL CEREBRO GLOBAL
+    <AppProvider>
+      <Router>
+        <div className={`${isDarkMode ? 'dark' : ''} transition-colors duration-500`}>
+          
+          <div className="bg-gray-50 dark:bg-[var(--color-dark-base)] min-h-screen font-sans text-gray-900 dark:text-white relative pb-28">
 
-          {/* BOTÓN DE TEMA */}
-          <button
-            onClick={toggleTheme}
-            className="absolute top-6 right-6 z-50 p-3 bg-white dark:bg-[var(--color-dark-card)] rounded-full shadow-md border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-[var(--color-neon-green)] hover:scale-110 transition-transform duration-300"
-            aria-label="Alternar Tema"
-          >
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+            {/* BOTÓN DE TEMA */}
+            <button
+              onClick={toggleTheme}
+              className="absolute top-6 right-6 z-50 p-3 bg-white dark:bg-[var(--color-dark-card)] rounded-full shadow-md border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-[var(--color-neon-green)] hover:scale-110 transition-transform duration-300"
+              aria-label="Alternar Tema"
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
 
-          {/* EL ENRUTADOR */}
-          <Routes>
-            <Route path="/" element={<ProjectLobby />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/ingresos" element={<Ingresos />} />
-            
-            {/* ACÁ ENCHUFAMOS LA PANTALLA DE GASTOS */}
-            <Route path="/gastos" element={<Gastos />} />
-            
-            {/* ACÁ ENCHUFAMOS LA BÓVEDA */}
-            <Route path="/boveda" element={<Boveda />} />
-            
-            <Route path="/registro" element={<PantallaEnConstruccion titulo="Nuevo Registro (+)" />} />
-          </Routes>
+            {/* EL ENRUTADOR */}
+            <Routes>
+              <Route path="/" element={<ProjectLobby />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/ingresos" element={<Ingresos />} />
+              <Route path="/gastos" element={<Gastos />} />
+              <Route path="/boveda" element={<Boveda />} />
+              
+              {/* ACÁ ENCHUFAMOS LA PANTALLA DE AJUSTES */}
+              <Route path="/ajustes" element={<AjustesBase />} />
+              
+              <Route path="/registro" element={<PantallaEnConstruccion titulo="Nuevo Registro (+)" />} />
+            </Routes>
 
-          {/* LA BARRA FLOTANTE */}
-          <BottomNav />
+            {/* LA BARRA FLOTANTE */}
+            <BottomNav />
 
+          </div>
         </div>
-      </div>
-    </Router>
+      </Router>
+    </AppProvider>
   );
 }
 
