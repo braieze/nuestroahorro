@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, ArrowRightLeft, Send, Settings, Target, TrendingDown, TrendingUp, PieChart as PieChartIcon, Loader2, Wallet, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { LineChart, Line, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, PieChart, Pie, Cell } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { db } from '../firebase';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { useApp } from '../context/AppContext';
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+// Paleta de colores pastel para los gráficos
+const COLORES_PASTEL = ['#d8b4fe', '#fbcfe8', '#bfdbfe', '#a7f3d0', '#fde047', '#c4b5fd'];
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -20,8 +23,6 @@ const Dashboard = () => {
   const [totalIngresosReal, setTotalIngresosReal] = useState(0);
   const [totalGastosReal, setTotalGastosReal] = useState(0);
   const [gastosPorCategoria, setGastosPorCategoria] = useState({});
-
-  const [activeTrend, setActiveTrend] = useState('ingresos');
 
   const mesAnterior = () => {
     if (mesActual === 0) { setMesActual(11); setAnioActual(anioActual - 1); } 
@@ -85,7 +86,7 @@ const Dashboard = () => {
         bovedaSnap.forEach(doc => sumaUsd += doc.data().montoUsd);
         setTotalBoveda(sumaUsd);
 
-        // 5. Saldo Mensual
+        // 5. Saldo Mensual (Queda por gastar)
         setMunicionTotal(sumaIngresos - sumaGastos);
 
       } catch (error) { console.error(error); } 
@@ -95,213 +96,159 @@ const Dashboard = () => {
     fetchDashboardData();
   }, [baseId, mesActual, anioActual, navigate]);
 
-  // --- DATOS PARA GRÁFICOS ---
-  const trendGraphs = {
-    ingresos: {
-      id: 'ingresos', title: 'Evolución Ingresos', color: 'var(--color-neon-green)', icon: TrendingUp, goal: 'Acumulado Mes',
-      data: [{ mes: 'Mes Pasado', valor: 0 }, { mes: MESES[mesActual], valor: totalIngresosReal }]
-    },
-    gastos: {
-      id: 'gastos', title: 'Tendencia Bajas', color: 'var(--color-alert-red)', icon: TrendingDown, goal: 'Bajas Mes',
-      data: [{ mes: 'Mes Pasado', valor: 0 }, { mes: MESES[mesActual], valor: totalGastosReal }]
-    },
-    boveda: {
-      id: 'boveda', title: 'Acumulación Bóveda', color: '#10b981', icon: Wallet, goal: `Meta: ${baseConfig?.metaUsd || 0} USD`,
-      data: [{ mes: 'Acumulado Total', valor: totalBoveda }]
-    }
-  };
-
-  const currentTrend = trendGraphs[activeTrend];
-
-  const TrendTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const isUsd = activeTrend === 'boveda';
-      return (
-        <div className="bg-[#111] border border-gray-800 p-3 rounded-xl shadow-2xl">
-          <p className="text-gray-400 text-xs font-bold uppercase mb-1">{label}</p>
-          <p className="font-mono font-black text-lg" style={{ color: currentTrend.color }}>
-            {isUsd ? 'USD ' : '$'}{payload[0].value.toLocaleString('es-AR')}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Pie Chart dinámico (Solo muestra las categorías que tuvieron gastos en el mes)
-  const pieData = baseConfig?.categorias?.map(cat => ({
-    name: cat.nombre, value: gastosPorCategoria[cat.id] || 0, color: cat.color
+  // Datos para Pie Chart con colores pastel
+  const pieData = baseConfig?.categorias?.map((cat, index) => ({
+    name: cat.nombre, 
+    value: gastosPorCategoria[cat.id] || 0, 
+    color: COLORES_PASTEL[index % COLORES_PASTEL.length] 
   })).filter(item => item.value > 0) || [];
   
-  if (gastosPorCategoria['Otros'] > 0) pieData.push({ name: 'Otros', value: gastosPorCategoria['Otros'], color: '#6b7280' });
+  if (gastosPorCategoria['Otros'] > 0) pieData.push({ name: 'Otros', value: gastosPorCategoria['Otros'], color: '#e2e8f0' });
+
+  if (loading) {
+    return <div className="min-h-screen bg-[#fcfaff] flex items-center justify-center"><Loader2 className="w-10 h-10 text-purple-400 animate-spin" /></div>;
+  }
 
   return (
-    <div className="pt-6 px-6 animate-in fade-in duration-500 overflow-x-hidden pb-40">
+    <div className="min-h-screen bg-[#fcfaff] p-4 sm:p-8 font-sans text-slate-700 animate-fade-in pb-32">
       
-      {/* MOTOR DEL TIEMPO */}
-      <header className="flex justify-between items-center mb-8 bg-white dark:bg-[#111] p-2 rounded-full border border-gray-100 dark:border-gray-800 shadow-sm">
-        <button onClick={mesAnterior} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><ChevronLeft className="w-5 h-5 text-gray-500" /></button>
+      {/* HEADER TIPO PLANNER */}
+      <header className="flex justify-between items-center mb-8 bg-purple-200/50 p-4 rounded-2xl shadow-sm border border-purple-100">
+        <button onClick={mesAnterior} className="p-2 bg-white rounded-full hover:bg-purple-50 transition-colors shadow-sm"><ChevronLeft className="w-5 h-5 text-purple-700" /></button>
         <div className="text-center">
-          <h2 className="text-sm font-black text-gray-900 dark:text-white tracking-widest uppercase">{MESES[mesActual]} {anioActual}</h2>
-          <p className="text-[10px] text-[var(--color-neon-green)] font-bold uppercase">{baseNombre}</p>
+          <h1 className="text-2xl font-bold text-purple-900 tracking-wide">{MESES[mesActual]}</h1>
+          <p className="text-xs text-purple-600 font-medium uppercase tracking-widest">{anioActual} | {baseNombre}</p>
         </div>
-        <button onClick={mesSiguiente} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><ChevronRight className="w-5 h-5 text-gray-500" /></button>
+        <button onClick={mesSiguiente} className="p-2 bg-white rounded-full hover:bg-purple-50 transition-colors shadow-sm"><ChevronRight className="w-5 h-5 text-purple-700" /></button>
       </header>
 
-      {/* MUNICIÓN MENSUAL */}
-      <section className="mb-8">
-        <p className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-widest mb-2 flex items-center justify-between">
-          <span>Munición Mensual</span>
-          <button onClick={() => navigate('/ajustes')} className="flex items-center gap-1 text-[10px] bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
-            <Settings className="w-3 h-3" /> Ajustes
-          </button>
-        </p>
-        {loading ? (
-          <div className="h-12 flex items-center"><Loader2 className="w-8 h-8 text-[var(--color-neon-green)] animate-spin" /></div>
-        ) : (
-          <div className="flex justify-start items-baseline">
-            <span className="text-3xl text-gray-400 dark:text-[var(--color-neon-green)]/70 font-mono mr-1">$</span>
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-gray-900 dark:text-[var(--color-neon-green)] font-mono truncate">
-              {municionTotal.toLocaleString('es-AR')}
-            </h1>
-          </div>
-        )}
-      </section>
+      {/* BLOQUE SUPERIOR: RESUMEN (ESTILO EXCEL/PLANNER) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white border border-purple-100 rounded-xl p-4 shadow-sm text-center">
+          <p className="text-sm font-semibold text-slate-500 mb-1">Total Ingresos</p>
+          <p className="text-2xl font-bold text-slate-800">${totalIngresosReal.toLocaleString('es-AR')}</p>
+        </div>
+        <div className="bg-white border border-purple-100 rounded-xl p-4 shadow-sm text-center">
+          <p className="text-sm font-semibold text-slate-500 mb-1">Total Gastos</p>
+          <p className="text-2xl font-bold text-slate-800">${totalGastosReal.toLocaleString('es-AR')}</p>
+        </div>
+        <div className="bg-purple-100 border border-purple-200 rounded-xl p-4 shadow-sm text-center">
+          <p className="text-sm font-bold text-purple-800 mb-1">Queda por gastar</p>
+          <p className="text-3xl font-extrabold text-purple-900">${municionTotal.toLocaleString('es-AR')}</p>
+        </div>
+      </div>
 
-      {/* BOTONES ACCIÓN RÁPIDA */}
-      <section className="flex justify-between gap-2 sm:gap-4 mb-10 overflow-x-auto pb-2 scrollbar-hide">
-        <div className="flex flex-col items-center gap-2 min-w-[70px]">
-          <button onClick={() => navigate('/ingresos')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-[var(--color-neon-green)] transition-all"><TrendingUp className="w-6 h-6 text-[var(--color-neon-green)]" /></button>
-          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Ingreso</span>
-        </div>
-        <div className="flex flex-col items-center gap-2 min-w-[70px]">
-          <button onClick={() => navigate('/gastos')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-[var(--color-alert-red)] transition-all"><TrendingDown className="w-6 h-6 text-[var(--color-alert-red)]" /></button>
-          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Gasto</span>
-        </div>
-        <div className="flex flex-col items-center gap-2 min-w-[70px]">
-          <button onClick={() => navigate('/boveda')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-blue-500 transition-all"><Wallet className="w-6 h-6 text-blue-500" /></button>
-          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Bóveda</span>
-        </div>
-        <div className="flex flex-col items-center gap-2 min-w-[70px]">
-          <button onClick={() => navigate('/')} className="w-14 h-14 bg-white dark:bg-[#111] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center hover:border-gray-500 transition-all"><MoreHorizontal className="w-6 h-6 text-gray-500" /></button>
-          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">Bases</span>
-        </div>
-      </section>
-
-      {/* FRENTES DE BATALLA DINÁMICOS + BÓVEDA FIJA */}
-      <section className="mb-10">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Frentes de Batalla</h3>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Bajas este mes</p>
-        </div>
-        
-        {loading ? (
-          <div className="flex justify-center"><Loader2 className="w-6 h-6 text-gray-500 animate-spin" /></div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            
-            {/* TARJETAS DE GASTOS CREADAS EN AJUSTES */}
-            {baseConfig?.categorias?.map(cat => (
-              <div key={cat.id} className="p-4 rounded-3xl text-white shadow-lg flex flex-col justify-between" style={{ backgroundColor: cat.color }}>
-                <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center mb-6 text-xl">{cat.emoji}</div>
-                <div>
-                  <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider opacity-90 mb-1 truncate">{cat.nombre}</p>
-                  <p className="text-xl sm:text-2xl font-black font-mono truncate">${(gastosPorCategoria[cat.id] || 0).toLocaleString('es-AR')}</p>
-                </div>
-              </div>
-            ))}
-            
-            {/* TARJETA FIJA DE LA BÓVEDA */}
-            <div className="p-4 rounded-3xl bg-[#111] border border-gray-800 shadow-lg flex flex-col justify-between">
-              <div className="w-8 h-8 bg-green-500/20 rounded-xl flex items-center justify-center mb-6 text-xl">🏦</div>
-              <div>
-                <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-400 mb-1 truncate">Bóveda (Ahorro)</p>
-                <p className="text-xl sm:text-2xl font-black font-mono text-[var(--color-neon-green)] truncate">USD {totalBoveda.toLocaleString('es-AR')}</p>
-              </div>
-            </div>
-
-            {/* Mensaje de apoyo si no hay categorías */}
-            {(!baseConfig?.categorias || baseConfig.categorias.length === 0) && (
-              <div className="col-span-1 p-6 rounded-3xl border-2 border-dashed border-gray-300 dark:border-gray-800 flex flex-col items-center justify-center text-center bg-gray-50 dark:bg-black/50">
-                <Target className="w-8 h-8 text-gray-400 mb-2" />
-                <button onClick={() => navigate('/ajustes')} className="mt-2 text-xs font-black text-[var(--color-neon-green)] uppercase">Crear Frentes</button>
-              </div>
-            )}
-
-          </div>
-        )}
-      </section>
-
-      {/* SECCIÓN 1: GRÁFICOS DE LÍNEAS (CON PESTAÑAS) */}
-      <section className="mb-8 bg-white dark:bg-[#111] p-4 sm:p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
-        <div className="flex gap-2 mb-6 bg-gray-100 dark:bg-black p-1 rounded-xl w-fit overflow-x-auto scrollbar-hide">
-          <button onClick={() => setActiveTrend('ingresos')} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${activeTrend === 'ingresos' ? 'bg-[var(--color-neon-green)]/20 text-[var(--color-neon-green)]' : 'text-gray-500 hover:text-gray-300'}`}>Ingresos</button>
-          <button onClick={() => setActiveTrend('gastos')} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${activeTrend === 'gastos' ? 'bg-[var(--color-alert-red)]/20 text-[var(--color-alert-red)]' : 'text-gray-500 hover:text-gray-300'}`}>Gastos</button>
-          <button onClick={() => setActiveTrend('boveda')} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors whitespace-nowrap ${activeTrend === 'boveda' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Bóveda</button>
-        </div>
-
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
-              <currentTrend.icon className="w-5 h-5" style={{ color: currentTrend.color }} /> {currentTrend.title}
-            </h3>
-          </div>
-          <div className="px-3 py-1 rounded-full text-xs font-bold font-mono" style={{ backgroundColor: `${currentTrend.color}20`, color: currentTrend.color }}>
-            {currentTrend.goal}
-          </div>
-        </div>
-        
-        <div className="h-48 w-full mt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={currentTrend.data} margin={{ top: 10, right: 15, left: 10, bottom: 0 }}>
-              <RechartsTooltip content={<TrendTooltip />} cursor={{ stroke: '#333', strokeWidth: 1, strokeDasharray: '4 4' }} />
-              <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#666', fontSize: 10, fontWeight: 'bold' }} dy={10} />
-              <Line key={activeTrend} type="monotone" dataKey="valor" stroke={currentTrend.color} strokeWidth={4} dot={{ r: 5, fill: '#111', stroke: currentTrend.color, strokeWidth: 3 }} activeDot={{ r: 7, fill: currentTrend.color }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-
-      {/* SECCIÓN 2: GRÁFICO DE TORTA DINÁMICO */}
-      <section className="bg-white dark:bg-[#111] p-4 sm:p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm">
-        <div className="mb-6">
-          <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
-            <PieChartIcon className="w-5 h-5 text-purple-500" /> Distribución de Bajas
-          </h3>
-          <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-bold">Mes: {MESES[mesActual]}</p>
-        </div>
-
-        <div className="h-56 w-full">
+      {/* SECCIÓN MEDIA: GRÁFICO Y RESUMEN GENERAL */}
+      <div className="bg-white border border-purple-100 rounded-2xl p-6 shadow-sm mb-8 flex flex-col md:flex-row items-center justify-between">
+        <div className="w-full md:w-1/2 h-64">
+          <h3 className="text-center font-bold text-slate-600 mb-2">Resumen de Gastos</h3>
           <ResponsiveContainer width="100%" height="100%">
             {pieData.length > 0 ? (
               <PieChart>
-                <RechartsTooltip contentStyle={{ backgroundColor: '#111', borderRadius: '12px', border: '1px solid #333' }} itemStyle={{ color: 'white', fontWeight: 'bold', fontFamily: 'monospace' }} formatter={(value) => `$${value.toLocaleString('es-AR')}`} />
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
+                <RechartsTooltip formatter={(value) => `$${value.toLocaleString('es-AR')}`} />
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value" stroke="none">
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
               </PieChart>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-500 text-sm font-bold uppercase tracking-wider text-center px-4">
-                No hay bajas registradas en este mes.
-              </div>
+              <div className="h-full flex items-center justify-center text-slate-400 text-sm">Sin datos este mes</div>
             )}
           </ResponsiveContainer>
         </div>
-
-        {pieData.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-3 mt-4">
-            {pieData.map((entry, index) => (
-              <div key={index} className="flex items-center gap-1.5 bg-gray-50 dark:bg-black px-2 py-1 rounded-lg">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                <span className="text-xs text-gray-600 dark:text-gray-400 font-bold uppercase">{entry.name}</span>
+        
+        {/* Leyenda del gráfico */}
+        <div className="w-full md:w-1/2 flex flex-col gap-2 mt-4 md:mt-0 px-4">
+          {pieData.map((entry, index) => (
+            <div key={index} className="flex justify-between items-center text-sm">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: entry.color }}></span>
+                <span className="text-slate-600 font-medium">{entry.name}</span>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+              <span className="font-bold text-slate-800">${entry.value.toLocaleString('es-AR')}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
+      {/* SECCIÓN INFERIOR: COLUMNAS ESTILO TABLA (PLANNER) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        
+        {/* Columna: Gastos Fijos/Variables */}
+        <div className="bg-white rounded-2xl border border-purple-100 shadow-sm overflow-hidden">
+          <div className="bg-purple-200/70 py-3 text-center">
+            <h3 className="font-bold text-purple-900">Control de Gastos</h3>
+          </div>
+          <div className="p-4">
+            <div className="flex justify-between text-xs font-bold text-slate-400 border-b border-slate-100 pb-2 mb-2 uppercase">
+              <span>Categoría</span>
+              <span>Actual</span>
+            </div>
+            <div className="space-y-3">
+              {baseConfig?.categorias?.map(cat => (
+                <div key={cat.id} className="flex justify-between items-center text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{cat.emoji}</span>
+                    <span className="text-slate-600">{cat.nombre}</span>
+                  </div>
+                  <span className="font-medium text-slate-800">${(gastosPorCategoria[cat.id] || 0).toLocaleString('es-AR')}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between font-bold text-purple-900">
+              <span>Total Gastos</span>
+              <span>${totalGastosReal.toLocaleString('es-AR')}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Columna: Bóveda / Ahorros */}
+        <div className="bg-white rounded-2xl border border-blue-100 shadow-sm overflow-hidden">
+          <div className="bg-blue-100/70 py-3 text-center">
+            <h3 className="font-bold text-blue-900">Bóveda & Ahorros</h3>
+          </div>
+          <div className="p-4">
+            <div className="flex justify-between text-xs font-bold text-slate-400 border-b border-slate-100 pb-2 mb-2 uppercase">
+              <span>Fondo</span>
+              <span>Acumulado</span>
+            </div>
+            <div className="flex justify-between items-center text-sm mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🏦</span>
+                <span className="text-slate-600">Caja Fuerte USD</span>
+              </div>
+              <span className="font-bold text-emerald-600">US$ {totalBoveda.toLocaleString('es-AR')}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🎯</span>
+                <span className="text-slate-600">Meta Actual</span>
+              </div>
+              <span className="font-medium text-slate-800">US$ {baseConfig?.metaUsd || 0}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Columna: Atajos Rápidos */}
+        <div className="bg-white rounded-2xl border border-pink-100 shadow-sm overflow-hidden">
+          <div className="bg-pink-100/70 py-3 text-center">
+            <h3 className="font-bold text-pink-900">Acciones</h3>
+          </div>
+          <div className="p-4 flex flex-col gap-3">
+            <button onClick={() => navigate('/gastos')} className="w-full py-3 bg-white border border-pink-200 text-pink-600 font-bold rounded-xl shadow-sm hover:bg-pink-50 transition-colors">
+              + Registrar Gasto
+            </button>
+            <button onClick={() => navigate('/ingresos')} className="w-full py-3 bg-white border border-emerald-200 text-emerald-600 font-bold rounded-xl shadow-sm hover:bg-emerald-50 transition-colors">
+              + Registrar Ingreso
+            </button>
+            <button onClick={() => navigate('/ajustes')} className="w-full py-3 mt-auto flex justify-center items-center gap-2 text-slate-500 font-medium hover:text-slate-700">
+              <Settings size={16} /> Ajustes de Plantilla
+            </button>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 };
